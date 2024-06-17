@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { OpenAI, AzureOpenAI } from "openai";
 import { type Page, TaskMessage, TaskResult } from "./types";
 import { prompt } from "./prompt";
 import { createActions } from "./createActions";
@@ -9,12 +9,20 @@ export const completeTask = async (
   page: Page,
   task: TaskMessage
 ): Promise<TaskResult> => {
-  const openai = new OpenAI({
-    apiKey: task.options?.openaiApiKey,
-    baseURL: task.options?.openaiBaseUrl,
-    defaultQuery: task.options?.openaiDefaultQuery,
-    defaultHeaders: task.options?.openaiDefaultHeaders,
-  });
+  const apiVersion = process.env.OPENAI_API_VERSION;
+  const azureApiKey = process.env.AZURE_OPENAI_API_KEY;
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
+  const deployment = task.options?.model ?? "gpt-4o";
+
+  const openai = azureApiKey 
+    ? new AzureOpenAI({ deployment, apiVersion, apiKey: azureApiKey }) 
+    : new OpenAI({
+      apiKey: task.options?.openaiApiKey ?? openAiApiKey,
+      baseURL: task.options?.openaiBaseUrl ?? baseURL,
+      defaultQuery: task.options?.openaiDefaultQuery,
+      defaultHeaders: task.options?.openaiDefaultHeaders,
+    });
 
   let lastFunctionResult: null | { errorMessage: string } | { query: string } =
     null;
@@ -25,12 +33,12 @@ export const completeTask = async (
 
   const runner = openai.beta.chat.completions
     .runTools({
-      model: task.options?.model ?? "gpt-4-1106-preview",
+      model: deployment,
       messages: [{ role: "user", content: prompt(task) }],
       tools: Object.values(actions).map((action) => ({
         type: "function",
         function: action,
-      })),
+      }))
     })
     .on("message", (message) => {
       if (debug) {
@@ -39,9 +47,9 @@ export const completeTask = async (
 
       if (
         message.role === "assistant" &&
-        message.function_call?.name.startsWith("result")
+        message.tool_calls?.some(tool => tool.function.name.startsWith("result"))
       ) {
-        lastFunctionResult = JSON.parse(message.function_call.arguments);
+        lastFunctionResult = JSON.parse(message.tool_calls?.filter(tool => tool.function.name.startsWith("result"))[0].function.arguments);
       }
     });
 
