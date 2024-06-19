@@ -16,7 +16,7 @@ export const completeTask = async (
   const deployment = task.options?.model ?? "gpt-4o";
 
   const openai = azureApiKey 
-    ? new AzureOpenAI({ deployment, apiVersion, apiKey: azureApiKey }) 
+    ? new AzureOpenAI({ baseURL, deployment, apiVersion, apiKey: azureApiKey }) 
     : new OpenAI({
       apiKey: task.options?.openaiApiKey ?? openAiApiKey,
       baseURL: task.options?.openaiBaseUrl ?? baseURL,
